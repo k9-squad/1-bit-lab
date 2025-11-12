@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>1-Bit 抖动转换器</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap');
+        
+        body {
+            font-family: 'Space Mono', monospace;
+            background-color: #121212;
+            color: #e0e0e0;
+        }
+
+        /* 确保像素艺术风格放大时不模糊 */
+        canvas {
+            image-rendering: -moz-crisp-edges;
+            image-rendering: -webkit-crisp-edges;
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+        }
+
+        .range-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            background: #e0e0e0;
+            cursor: pointer;
+            border-radius: 0;
+            border: 2px solid #000;
+        }
+
+        .retro-border {
+            box-shadow: 4px 4px 0px 0px #333;
+            border: 2px solid #333;
+            transition: all 0.1s;
+        }
+        
+        .retro-border:active {
+            transform: translate(2px, 2px);
+            box-shadow: 2px 2px 0px 0px #333;
+        }
+
+        .dither-pattern {
+            background-image: radial-gradient(#333 1px, transparent 1px);
+            background-size: 4px 4px;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center py-8 px-4 dither-pattern">
+
+    <!-- Header -->
+    <header class="mb-8 text-center w-full max-w-2xl">
+        <h1 class="text-4xl md:text-6xl font-bold uppercase tracking-tighter mb-2 text-white">1-Bit Lab</h1>
+        <p class="text-zinc-400 text-sm md:text-base">将图片转换为复古黑白像素艺术</p>
+    </header>
+
+    <!-- Main Interface -->
+    <main class="w-full max-w-4xl bg-[#1a1a1a] p-4 md:p-6 border-2 border-zinc-700 shadow-2xl flex flex-col md:flex-row gap-6">
+        
+        <!-- Left: Canvas/Preview -->
+        <div class="flex-1 flex flex-col items-center justify-center bg-[#000] border border-zinc-800 relative min-h-[300px] overflow-hidden group">
+            <div id="placeholder" class="flex flex-col items-center text-zinc-600">
+                <i data-lucide="image-plus" class="w-12 h-12 mb-2"></i>
+                <span>上传图片开始</span>
+            </div>
+            
+            <!-- The Canvas -->
+            <canvas id="canvas" class="max-w-full max-h-[60vh] hidden object-contain"></canvas>
+            
+            <!-- Loading Overlay -->
+            <div id="loader" class="absolute inset-0 bg-black/80 flex items-center justify-center hidden z-10">
+                <div class="animate-spin w-8 h-8 border-4 border-white border-t-transparent rounded-full"></div>
+            </div>
+        </div>
+
+        <!-- Right: Controls -->
+        <div class="w-full md:w-80 flex flex-col gap-6">
+            
+            <!-- Upload Button -->
+            <div class="relative">
+                <input type="file" id="uploadInput" accept="image/*" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
+                <button class="w-full bg-white text-black font-bold py-3 px-4 border-2 border-white retro-border flex items-center justify-center gap-2 hover:bg-zinc-200">
+                    <i data-lucide="upload"></i> 选择图片
+                </button>
+            </div>
+
+            <!-- Controls Container (Disabled initially) -->
+            <div id="controls" class="flex flex-col gap-5 opacity-50 pointer-events-none transition-opacity duration-300">
+                
+                <!-- Algorithm Selector -->
+                <div class="flex flex-col gap-2">
+                    <label class="text-xs uppercase font-bold text-zinc-500 tracking-widest">算法 (Algorithm)</label>
+                    <select id="algoSelect" class="bg-zinc-900 text-white p-2 border border-zinc-700 focus:border-white outline-none">
+                        <option value="atkinson">Atkinson (Mac)</option>
+                        <option value="floyd">Floyd-Steinberg</option>
+                        <option value="bayer4">Bayer 4x4 (有序)</option>
+                        <option value="bayer8">Bayer 8x8 (有序)</option>
+                        <option value="threshold">简单阈值 (Threshold)</option>
+                        <option value="random">随机噪点 (Random)</option>
+                    </select>
+                </div>
+
+                <!-- Resolution Slider -->
+                <div class="flex flex-col gap-2">
+                    <div class="flex justify-between text-xs font-bold text-zinc-500 uppercase">
+                        <label>像素大小 (Resolution)</label>
+                        <span id="scaleValue">100%</span>
+                    </div>
+                    <input type="range" id="scaleRange" min="0.1" max="1" step="0.05" value="1" class="range-slider w-full h-2 bg-zinc-800 rounded-lg appearance-none cursor-pointer">
+                </div>
+
+                <!-- Threshold/Brightness Slider -->
+                <div class="flex flex-col gap-2">
+                    <div class="flex justify-between text-xs font-bold text-zinc-500 uppercase">
+                        <label>亮度阈值 (Threshold)</label>
+                        <span id="threshValue">128</span>
+                    </div>
+                    <input type="range" id="threshRange" min="0" max="255" step="1" value="128" class="range-slider w-full h-2 bg-zinc-800 rounded-lg appearance-none cursor-pointer">
+                </div>
+                
+                <!-- Color Invert -->
+                <div class="flex items-center gap-3">
+                    <input type="checkbox" id="invertCheck" class="w-5 h-5 bg-zinc-900 border-zinc-700 rounded focus:ring-0 checked:bg-white checked:border-white text-black">
+                    <label for="invertCheck" class="text-sm text-zinc-300 cursor-pointer select-none">反转颜色 (Invert)</label>
+                </div>
+
+                <div class="h-px bg-zinc-800 my-2"></div>
+
+                <!-- Download -->
+                <button id="downloadBtn" class="w-full bg-zinc-800 text-white font-bold py-3 px-4 border-2 border-zinc-600 retro-border hover:bg-zinc-700 flex items-center justify-center gap-2">
+                    <i data-lucide="download"></i> 下载 PNG
+                </button>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="mt-8 text-zinc-600 text-xs">
+        <p>Generated completely client-side.</p>
+    </footer>
+
+    <script>
+        // 初始化图标
+        lucide.createIcons();
+
+        // 元素引用
+        const uploadInput = document.getElementById('uploadInput');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        const placeholder = document.getElementById('placeholder');
+        const controls = document.getElementById('controls');
+        const loader = document.getElementById('loader');
+
+        const algoSelect = document.getElementById('algoSelect');
+        const scaleRange = document.getElementById('scaleRange');
+        const scaleValue = document.getElementById('scaleValue');
+        const threshRange = document.getElementById('threshRange');
+        const threshValue = document.getElementById('threshValue');
+        const invertCheck = document.getElementById('invertCheck');
+        const downloadBtn = document.getElementById('downloadBtn');
+
+        // 状态变量
+        let originalImage = null;
+        let isProcessing = false;
+
+        // Bayer Matrices
+        const bayer4 = [
+            [0, 8, 2, 10],
+            [12, 4, 14, 6],
+            [3, 11, 1, 9],
+            [15, 7, 13, 5]
+        ]; // /16
+
+        const bayer8 = [
+            [0, 32, 8, 40, 2, 34, 10, 42],
+            [48, 16, 56, 24, 50, 18, 58, 26],
+            [12, 44, 4, 36, 14, 46, 6, 38],
+            [60, 28, 52, 20, 62, 30, 54, 22],
+            [3, 35, 11, 43, 1, 33, 9, 41],
+            [51, 19, 59, 27, 49, 17, 57, 25],
+            [15, 47, 7, 39, 13, 45, 5, 37],
+            [63, 31, 55, 23, 61, 29, 53, 21]
+        ]; // /64
+
+        // 监听器
+        uploadInput.addEventListener('change', handleUpload);
+        algoSelect.addEventListener('change', requestProcess);
+        scaleRange.addEventListener('input', (e) => {
+            scaleValue.textContent = Math.round(e.target.value * 100) + '%';
+            requestProcess();
+        });
+        threshRange.addEventListener('input', (e) => {
+            threshValue.textContent = e.target.value;
+            requestProcess();
+        });
+        invertCheck.addEventListener('change', requestProcess);
+        downloadBtn.addEventListener('click', downloadImage);
+
+        // 处理上传
+        function handleUpload(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const img = new Image();
+                img.onload = () => {
+                    originalImage = img;
+                    
+                    // UI 更新
+                    placeholder.classList.add('hidden');
+                    canvas.classList.remove('hidden');
+                    controls.classList.remove('opacity-50', 'pointer-events-none');
+                    controls.classList.add('opacity-100');
+                    
+                    requestProcess();
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // 防抖动处理请求
+        let timeoutId;
+        function requestProcess() {
+            if (!originalImage) return;
+            
+            // 显示加载动画
+            loader.classList.remove('hidden');
+            
+            if (timeoutId) clearTimeout(timeoutId);
+            
+            timeoutId = setTimeout(() => {
+                // 使用 requestAnimationFrame 避免阻塞 UI
+                requestAnimationFrame(() => {
+                    processImage();
+                    loader.classList.add('hidden');
+                });
+            }, 50);
+        }
+
+        // 核心处理函数
+        function processImage() {
+            if (!originalImage) return;
+
+            // 1. 确定尺寸 (分辨率)
+            const scale = parseFloat(scaleRange.value);
+            const targetWidth = Math.floor(originalImage.width * scale);
+            const targetHeight = Math.floor(originalImage.height * scale);
+
+            canvas.width = targetWidth;
+            canvas.height = targetHeight;
+
+            // 2. 绘制原始图片并获取数据
+            ctx.drawImage(originalImage, 0, 0, targetWidth, targetHeight);
+            const imageData = ctx.getImageData(0, 0, targetWidth, targetHeight);
+            const data = imageData.data;
+            const width = imageData.width;
+            const height = imageData.height;
+
+            // 3. 获取参数
+            const algo = algoSelect.value;
+            const thresholdBase = parseInt(threshRange.value);
+            const invert = invertCheck.checked;
+
+            // 4. 灰度化处理 (预处理)
+            // 我们将灰度数据直接存在 R 通道中以便后续处理，或者直接处理
+            for (let i = 0; i < data.length; i += 4) {
+                // 亮度感知公式
+                let gray = 0.299 * data[i] + 0.587 * data[i+1] + 0.114 * data[i+2];
+                if (invert) gray = 255 - gray;
+                data[i] = gray;   // R
+                data[i+1] = gray; // G
+                data[i+2] = gray; // B
+                // Alpha 保持不变
+            }
+
+            // 5. 应用抖动算法
+            switch (algo) {
+                case 'threshold':
+                    applyThreshold(data, thresholdBase);
+                    break;
+                case 'random':
+                    applyRandom(data);
+                    break;
+                case 'bayer4':
+                    applyBayer(data, width, height, bayer4, 16);
+                    break;
+                case 'bayer8':
+                    applyBayer(data, width, height, bayer8, 64);
+                    break;
+                case 'floyd':
+                    applyErrorDiffusion(data, width, height, 'floyd', thresholdBase);
+                    break;
+                case 'atkinson':
+                    applyErrorDiffusion(data, width, height, 'atkinson', thresholdBase);
+                    break;
+            }
+
+            // 6. 重新绘制到 Canvas
+            ctx.putImageData(imageData, 0, 0);
+        }
+
+        // --- 算法实现 ---
+
+        function applyThreshold(data, threshold) {
+            for (let i = 0; i < data.length; i += 4) {
+                const v = data[i] > threshold ? 255 : 0;
+                data[i] = data[i+1] = data[i+2] = v;
+            }
+        }
+
+        function applyRandom(data) {
+            for (let i = 0; i < data.length; i += 4) {
+                const threshold = Math.random() * 255;
+                const v = data[i] > threshold ? 255 : 0;
+                data[i] = data[i+1] = data[i+2] = v;
+            }
+        }
+
+        function applyBayer(data, width, height, matrix, divisor) {
+            const matrixSize = matrix.length;
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    const i = (y * width + x) * 4;
+                    const gray = data[i];
+                    
+                    // 获取矩阵阈值 (0-255 范围)
+                    const matrixValue = matrix[y % matrixSize][x % matrixSize];
+                    const threshold = (matrixValue / divisor) * 255;
+                    
+                    const v = gray > threshold ? 255 : 0;
+                    data[i] = data[i+1] = data[i+2] = v;
+                }
+            }
+        }
+
+        function applyErrorDiffusion(data, width, height, type, thresholdBase) {
+            // 需要一个浮点数数组来存储误差，避免过早截断
+            // 简单的实现可以直接修改 data，但因为 data 是 Uint8ClampedArray，误差累积可能会有问题
+            // 为了准确性，通常建议用一个副本，但为了性能和复古效果的 "粗糙感"，直接修改 data 也常用于 Web 实现
+            // 这里我们稍微严谨一点，不直接改写源像素直到处理它
+            
+            // 注意：data 中现在 RGB 都是灰度值，我们只需要读取 R (data[i])
+            
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    const i = (y * width + x) * 4;
+                    const oldPixel = data[i];
+                    const newPixel = oldPixel > thresholdBase ? 255 : 0;
+                    
+                    data[i] = data[i+1] = data[i+2] = newPixel;
+                    
+                    const quantError = oldPixel - newPixel;
+
+                    if (type === 'floyd') {
+                        // Floyd-Steinberg
+                        //   X   7
+                        // 3 5   1
+                        // ( / 16 )
+                        distributeError(data, width, height, x + 1, y, quantError * 7 / 16);
+                        distributeError(data, width, height, x - 1, y + 1, quantError * 3 / 16);
+                        distributeError(data, width, height, x, y + 1, quantError * 5 / 16);
+                        distributeError(data, width, height, x + 1, y + 1, quantError * 1 / 16);
+                    } else if (type === 'atkinson') {
+                        // Atkinson (Macintosh)
+                        //   X   1   1 
+                        // 1 1   1
+                        //   1
+                        // ( / 8 )
+                        const err = quantError / 8;
+                        distributeError(data, width, height, x + 1, y, err);
+                        distributeError(data, width, height, x + 2, y, err);
+                        distributeError(data, width, height, x - 1, y + 1, err);
+                        distributeError(data, width, height, x, y + 1, err);
+                        distributeError(data, width, height, x + 1, y + 1, err);
+                        distributeError(data, width, height, x, y + 2, err);
+                    }
+                }
+            }
+        }
+
+        function distributeError(data, width, height, x, y, err) {
+            if (x < 0 || x >= width || y < 0 || y >= height) return;
+            const i = (y * width + x) * 4;
+            // 累加误差到相邻像素
+            // 注意：Uint8ClampedArray 会自动处理 0-255 的截断，
+            // 但在误差扩散中，我们其实希望能保留溢出值直到下一次计算。
+            // 完美的实现需要一个 Int16 数组 buffer。
+            // 但为了简化和保持代码在一个文件中，直接操作 ImageData 也能得到很好的视觉效果。
+            // 这里的关键是， data[i] 读出来是整数，加 err (浮点) 后再赋值回去会自动取整截断。
+            data[i] = data[i] + err; 
+            // 同步 RGB
+            data[i+1] = data[i];
+            data[i+2] = data[i];
+        }
+
+        function downloadImage() {
+            if (!originalImage) return;
+            const link = document.createElement('a');
+            link.download = '1bit-dithered.png';
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        }
+    </script>
+</body>
+</html>
