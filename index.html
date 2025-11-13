@@ -11,9 +11,15 @@
         
         body {
             font-family: 'Space Mono', monospace;
-            background-color: #050505; /* 默认深色背景 */
+            background-color: #050505;
             color: #e0e0e0;
-            transition: background-color 0.3s ease; /* 平滑过渡背景色 */
+            transition: background-color 0.3s ease;
+        }
+
+        /* 波点背景 */
+        .dither-pattern {
+            background-image: radial-gradient(rgba(255, 255, 255, 0.1) 1px, transparent 1px);
+            background-size: 4px 4px;
         }
 
         canvas {
@@ -45,59 +51,111 @@
             box-shadow: 2px 2px 0px 0px #333;
         }
 
-        .palette-radio:checked + label {
-            border-color: white;
-            transform: scale(1.05);
-            box-shadow: 0 0 10px rgba(255,255,255,0.5);
+        /* === 调色板按钮重构 (Palette Button Fix) === 
+           使用 Flex 布局实现无缝连接，并处理 Z-Index 
+        */
+        .palette-label {
+            height: 3rem; /* 增加高度，便于点击 */
+            width: 100%;
+            display: block;
+            cursor: pointer;
+            position: relative; /* 必须为 relative 以便 z-index 生效 */
+            transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1); /* 弹性动画 */
+            border: none; /* 默认无边框，实现无缝连接 */
         }
+
+        /* 只有第一个元素有左圆角 */
+        .palette-wrapper:first-child .palette-label {
+            border-top-left-radius: 0.5rem;
+            border-bottom-left-radius: 0.5rem;
+        }
+
+        /* 只有最后一个元素有右圆角 */
+        .palette-wrapper:last-child .palette-label {
+            border-top-right-radius: 0.5rem;
+            border-bottom-right-radius: 0.5rem;
+        }
+
+        /* 选中状态：放大、加边框、提升层级 */
+        .palette-radio:checked + .palette-label {
+            z-index: 20; /* 最高层级，防止被邻居遮挡 */
+            transform: scale(1.15);
+            border: 2px solid white;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+        }
+
+        /* 悬停状态：轻微浮起 */
+        .palette-label:hover {
+            z-index: 10;
+            transform: scale(1.05);
+        }
+        
+        /* 选中状态下悬停保持高层级 */
+        .palette-radio:checked + .palette-label:hover {
+            z-index: 20;
+            transform: scale(1.15);
+        }
+
     </style>
 </head>
-<body class="min-h-screen flex flex-col items-center py-6 px-4">
+<body class="min-h-screen flex flex-col items-center py-6 px-4 dither-pattern transition-colors duration-500">
 
-    <!-- Header --><header class="mb-6 text-center w-full max-w-2xl">
-        <h1 class="text-3xl md:text-5xl font-bold uppercase tracking-tighter mb-2 text-white">
+    <!-- Header -->
+    <header class="mb-6 text-center w-full max-w-2xl relative z-10">
+        <h1 class="text-3xl md:text-5xl font-bold uppercase tracking-tighter mb-2 text-white drop-shadow-lg">
             <span id="title-1bit" class="transition-colors duration-300">1-BIT</span> PIXEL LAB
         </h1>
     </header>
 
-    <!-- Main Interface --><main class="w-full max-w-5xl bg-[#111] p-4 md:p-6 border border-zinc-800 shadow-2xl flex flex-col lg:flex-row gap-6 rounded-sm">
+    <!-- Main Interface -->
+    <main class="w-full max-w-5xl bg-[#111] p-4 md:p-6 border border-zinc-800 shadow-2xl flex flex-col lg:flex-row gap-6 rounded-sm relative z-10">
         
-        <!-- Left: Canvas/Preview --><div class="flex-1 flex flex-col bg-black border border-zinc-800 relative min-h-[400px] lg:h-[600px] overflow-hidden group justify-center items-center">
+        <!-- Left: Canvas/Preview -->
+        <div class="flex-1 flex flex-col bg-black border border-zinc-800 relative min-h-[400px] lg:h-[600px] overflow-hidden group justify-center items-center">
             
-            <!-- Placeholder State --><div id="placeholder" class="flex flex-col items-center text-zinc-600 absolute inset-0 justify-center pointer-events-none">
+            <div id="placeholder" class="flex flex-col items-center text-zinc-600 absolute inset-0 justify-center pointer-events-none">
                 <i data-lucide="image-plus" class="w-16 h-16 mb-4 opacity-50"></i>
                 <span class="tracking-widest uppercase text-sm">上传图片以开始</span>
             </div>
             
-            <!-- The Canvas (Hidden initially) --><canvas id="displayCanvas" class="max-w-full max-h-full object-contain hidden shadow-lg"></canvas>
+            <canvas id="displayCanvas" class="max-w-full max-h-full object-contain hidden shadow-lg"></canvas>
             
-            <!-- Loading Overlay --><div id="loader" class="absolute inset-0 bg-black/90 flex flex-col gap-3 items-center justify-center hidden z-20">
+            <div id="loader" class="absolute inset-0 bg-black/90 flex flex-col gap-3 items-center justify-center hidden z-20">
                 <div class="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
                 <span class="text-emerald-500 text-xs uppercase animate-pulse">Rendering Pixels...</span>
             </div>
         </div>
 
-        <!-- Right: Controls --><div class="w-full lg:w-96 flex flex-col gap-5 h-full overflow-y-auto pr-1">
+        <!-- Right: Controls -->
+        <div class="w-full lg:w-96 flex flex-col gap-5 h-full overflow-y-auto pr-1">
             
-            <!-- Upload Button --><div class="relative w-full shrink-0">
+            <!-- Upload Button -->
+            <div class="relative w-full shrink-0">
                 <input type="file" id="uploadInput" accept="image/*" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
                 <button class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 px-4 border-2 border-emerald-800 retro-border flex items-center justify-center gap-2 uppercase tracking-wide transition-colors">
                     <i data-lucide="upload"></i> 上传图片
                 </button>
             </div>
 
-            <!-- Controls Group --><div id="controls" class="flex flex-col gap-5 opacity-40 pointer-events-none transition-opacity duration-300 pb-4">
+            <!-- Controls Group -->
+            <div id="controls" class="flex flex-col gap-5 opacity-40 pointer-events-none transition-opacity duration-300 pb-4">
                 
-                <!-- Palette Selection --><div class="bg-zinc-900 p-3 border border-zinc-800">
+                <!-- Palette Selection -->
+                <div class="bg-zinc-900 p-3 border border-zinc-800 rounded-lg">
                     <label class="text-[10px] uppercase font-bold text-zinc-500 tracking-widest block mb-3">色彩风格 (Palette)</label>
-                    <div class="grid grid-cols-5 gap-2" id="paletteContainer">
-                        <!-- Palettes will be injected here via JS --></div>
-                    <div id="paletteName" class="text-center text-xs mt-2 text-zinc-400 font-mono min-h-[1rem]">经典 1-Bit</div>
+                    
+                    <!-- 使用 Flex 容器替代 Grid，确保无缝连接 -->
+                    <div class="flex flex-row w-full shadow-sm" id="paletteContainer">
+                        <!-- JS 将注入 .palette-wrapper -->
+                    </div>
+                    
+                    <div id="paletteName" class="text-center text-xs mt-3 text-zinc-400 font-mono font-bold min-h-[1rem] transition-all">经典</div>
                 </div>
 
-                <!-- Algorithm Selector --><div class="flex flex-col gap-1">
+                <!-- Algorithm Selector -->
+                <div class="flex flex-col gap-1">
                     <label class="text-[10px] uppercase font-bold text-zinc-500 tracking-widest">算法 (Algorithm)</label>
-                    <select id="algoSelect" class="bg-zinc-900 text-zinc-300 text-sm p-2 border border-zinc-700 focus:border-emerald-500 outline-none w-full">
+                    <select id="algoSelect" class="bg-zinc-900 text-zinc-300 text-sm p-2 border border-zinc-700 focus:border-emerald-500 outline-none w-full rounded-sm">
                         <option value="atkinson">Atkinson (复古Mac)</option>
                         <option value="floyd">Floyd-Steinberg (细腻)</option>
                         <option value="bayer4">Bayer 4x4 (有序)</option>
@@ -106,40 +164,48 @@
                     </select>
                 </div>
 
-                <!-- Resolution Slider --><div class="flex flex-col gap-2 bg-zinc-900 p-3 border border-zinc-800">
+                <!-- Resolution Slider -->
+                <div class="flex flex-col gap-2 bg-zinc-900 p-3 border border-zinc-800 rounded-lg">
                     <div class="flex justify-between text-[10px] font-bold text-zinc-500 uppercase">
-                        <label>像素颗粒度 (Pixel Scale)</label>
+                        <label>像素分辨率</label>
                         <span id="scaleValue" class="text-emerald-400">1.0x (原图)</span>
                     </div>
                     <input type="range" id="scaleRange" min="0.02" max="1" step="0.02" value="1" class="range-slider w-full h-2 bg-zinc-800 rounded-lg appearance-none cursor-pointer">
-                    <p class="text-[10px] text-zinc-600 mt-1">左滑降低图像分辨率</p>
+                    <p class="text-[10px] text-zinc-500 mt-1 italic">← 左滑降低分辨率 (Low-Res)</p>
                 </div>
 
-                <!-- Threshold Slider --><div class="flex flex-col gap-2">
+                <!-- Threshold Slider -->
+                <div class="flex flex-col gap-2">
                     <div class="flex justify-between text-[10px] font-bold text-zinc-500 uppercase">
-                        <label>亮度阈值 (Threshold)</label>
+                        <label>亮度判定 (Threshold)</label>
                         <span id="threshValue">128</span>
                     </div>
                     <input type="range" id="threshRange" min="0" max="255" step="1" value="128" class="range-slider w-full h-2 bg-zinc-800 rounded-lg appearance-none cursor-pointer">
                 </div>
 
-                <!-- Download --><button id="downloadBtn" class="mt-2 w-full bg-zinc-200 text-black font-bold py-3 px-4 border-2 border-white retro-border hover:bg-white flex items-center justify-center gap-2 uppercase tracking-wider">
+                <!-- Download -->
+                <button id="downloadBtn" class="mt-2 w-full bg-zinc-200 text-black font-bold py-3 px-4 border-2 border-white retro-border hover:bg-white flex items-center justify-center gap-2 uppercase tracking-wider">
                     <i data-lucide="download"></i> 保存 PNG
                 </button>
             </div>
         </div>
     </main>
 
+    <!-- Footer -->
+    <footer class="mt-8 text-zinc-500 text-xs font-mono opacity-70">
+        <p>Generated completely client-side.</p>
+    </footer>
+
     <script>
         lucide.createIcons();
 
         // --- 配置数据 ---
         const palettes = [
-            { id: 'classic', name: '经典黑白', dark: [0,0,0], light: [255,255,255] },
-            { id: 'kraken', name: '海怪传说', dark: [28, 30, 36], light: [85, 255, 255] }, // Obra Dinn 风格
+            { id: 'classic', name: '经典', dark: [0,0,0], light: [255,255,255] },
+            { id: 'ibm', name: 'IBM 8503', dark: [28, 30, 36], light: [85, 255, 255] },
             { id: 'gameboy', name: 'Game Boy', dark: [15, 56, 15], light: [155, 188, 15] },
-            { id: 'memory', name: '记忆残片', dark: [45, 25, 25], light: [225, 160, 120] }, // 谁是劳拉风格
-            { id: 'amber', name: '终端机', dark: [30, 20, 0], light: [255, 176, 0] }
+            { id: 'memory', name: '残片', dark: [45, 25, 25], light: [225, 160, 120] },
+            { id: 'terminal', name: '终端', dark: [30, 20, 0], light: [255, 176, 0] }
         ];
 
         // --- DOM 元素 ---
@@ -154,7 +220,6 @@
         const title1bit = document.getElementById('title-1bit');
         const body = document.body;
         
-        // 控件
         const algoSelect = document.getElementById('algoSelect');
         const scaleRange = document.getElementById('scaleRange');
         const scaleValueDisplay = document.getElementById('scaleValue');
@@ -169,10 +234,13 @@
 
         // --- 初始化 ---
         function initPalettes() {
+            paletteContainer.innerHTML = ''; // 清空容器
+
             palettes.forEach((p, index) => {
-                const div = document.createElement('div');
-                div.className = 'relative cursor-pointer group';
-                
+                // 创建包装器 div，用于 flex 布局
+                const wrapper = document.createElement('div');
+                wrapper.className = 'palette-wrapper flex-1 relative'; // flex-1 均分空间
+
                 const input = document.createElement('input');
                 input.type = 'radio';
                 input.name = 'palette';
@@ -182,67 +250,55 @@
                 input.onchange = () => {
                     currentPalette = p;
                     paletteNameDisplay.textContent = p.name;
-                    updateThemeColors(); // 更新主题颜色
+                    updateThemeColors(); 
                     requestProcess();
                 };
 
                 const label = document.createElement('label');
                 label.htmlFor = `p-${p.id}`;
-                label.className = 'block w-full h-10 border-2 border-transparent rounded shadow-sm transition-transform hover:scale-110';
+                label.className = 'palette-label'; // 样式类在 CSS 中定义
                 label.style.background = `linear-gradient(135deg, rgb(${p.dark.join(',')}) 50%, rgb(${p.light.join(',')}) 50%)`;
 
-                div.appendChild(input);
-                div.appendChild(label);
-                paletteContainer.appendChild(div);
+                wrapper.appendChild(input);
+                wrapper.appendChild(label);
+                paletteContainer.appendChild(wrapper);
             });
-            updateThemeColors(); // 初始化主题颜色
+            updateThemeColors();
         }
 
         function updateThemeColors() {
-            // 更新标题 1-BIT 颜色
-            title1bit.style.color = `rgb(${currentPalette.light.join(',')})`;
-            // 更新 body 背景颜色
-            body.style.backgroundColor = `rgb(${currentPalette.dark.join(',')})`;
-            // 更新加载动画的颜色
-            const loaderSpinner = loader.querySelector('.animate-spin');
-            const loaderText = loader.querySelector('.uppercase');
-            if (loaderSpinner) {
-                loaderSpinner.style.borderColor = `rgb(${currentPalette.light.join(',')})`;
-                loaderSpinner.style.borderTopColor = 'transparent'; // 确保顶部透明
-            }
-            if (loaderText) {
-                loaderText.style.color = `rgb(${currentPalette.light.join(',')})`;
+            const lightColor = `rgb(${currentPalette.light.join(',')})`;
+            const darkColor = `rgb(${currentPalette.dark.join(',')})`;
+
+            title1bit.style.color = lightColor;
+            body.style.backgroundColor = darkColor;
+            
+            // 更新波点颜色以适应背景
+            const ditherPattern = document.querySelector('.dither-pattern');
+            if (currentPalette.id === 'classic') {
+                ditherPattern.style.backgroundImage = `radial-gradient(rgba(255, 255, 255, 0.15) 1px, transparent 1px)`;
+            } else {
+                 // 其他颜色使用半透明亮色
+                 ditherPattern.style.backgroundImage = `radial-gradient(rgba(${currentPalette.light.join(',')}, 0.2) 1px, transparent 1px)`;
             }
 
-            // 更新上传按钮的颜色 (使用一个和当前主题亮色搭配的颜色)
+            const loaderSpinner = loader.querySelector('.animate-spin');
+            const loaderText = loader.querySelector('.uppercase');
+            if (loaderSpinner) loaderSpinner.style.borderColor = lightColor;
+            if (loaderText) loaderText.style.color = lightColor;
+
             const uploadButton = uploadInput.nextElementSibling;
             const downloadButton = downloadBtn;
 
-            if (currentPalette.id === 'classic') {
-                uploadButton.style.backgroundColor = '#1a1a1a'; // 稍微深一点的灰
-                uploadButton.style.borderColor = '#444';
-                uploadButton.style.color = '#e0e0e0';
-                uploadButton.classList.add('hover:bg-zinc-700');
-                uploadButton.classList.remove('hover:bg-emerald-500');
-
-                downloadButton.style.backgroundColor = '#e0e0e0';
-                downloadButton.style.borderColor = '#aaa';
-                downloadButton.style.color = '#000';
-                downloadButton.classList.add('hover:bg-white');
-                downloadButton.classList.remove('hover:bg-emerald-500');
-            } else {
-                uploadButton.style.backgroundColor = `rgb(${currentPalette.light.join(',')})`;
-                uploadButton.style.borderColor = `rgb(${currentPalette.dark.join(',')})`;
-                uploadButton.style.color = `rgb(${currentPalette.dark.join(',')})`;
-                uploadButton.classList.remove('hover:bg-zinc-700');
-                uploadButton.classList.add('hover:opacity-80'); // 亮色按钮透明度变化
-                
-                downloadButton.style.backgroundColor = `rgb(${currentPalette.light.join(',')})`;
-                downloadButton.style.borderColor = `rgb(${currentPalette.dark.join(',')})`;
-                downloadButton.style.color = `rgb(${currentPalette.dark.join(',')})`;
-                downloadButton.classList.remove('hover:bg-white');
-                downloadButton.classList.add('hover:opacity-80');
-            }
+            // 按钮样式统一逻辑
+            [uploadButton, downloadButton].forEach(btn => {
+                btn.style.backgroundColor = lightColor;
+                btn.style.borderColor = darkColor; // 边框设为暗色，增加对比
+                btn.style.color = darkColor;
+                // 移除可能冲突的 Tailwind 类
+                btn.classList.remove('hover:bg-zinc-700', 'hover:bg-emerald-500', 'hover:bg-white', 'text-white', 'text-black');
+                btn.classList.add('hover:opacity-80'); 
+            });
         }
 
         initPalettes();
@@ -361,18 +417,17 @@
             displayCtx.drawImage(procCanvas, 0, 0, displayCanvas.width, displayCanvas.height);
         }
 
-        // --- 算法实现 (保持不变) ---
-
+        // --- 算法实现 ---
         const bayer4 = [
             [0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]
-        ]; // div 16
+        ]; 
 
         const bayer8 = [
             [0, 32, 8, 40, 2, 34, 10, 42], [48, 16, 56, 24, 50, 18, 58, 26],
             [12, 44, 4, 36, 14, 46, 6, 38], [60, 28, 52, 20, 62, 30, 54, 22],
             [3, 35, 11, 43, 1, 33, 9, 41], [51, 19, 59, 27, 49, 17, 57, 25],
             [15, 47, 7, 39, 13, 45, 5, 37], [63, 31, 55, 23, 61, 29, 53, 21]
-        ]; // div 64
+        ];
 
         function applyThreshold(data, th) {
             for (let i=0; i<data.length; i+=4) data[i] = data[i] > th ? 255 : 0;
@@ -408,7 +463,7 @@
                         distribute(data, w, h, x-1, y+1, err * 3/16);
                         distribute(data, w, h, x, y+1, err * 5/16);
                         distribute(data, w, h, x+1, y+1, err * 1/16);
-                    } else { // Atkinson
+                    } else {
                         const e = err / 8;
                         distribute(data, w, h, x+1, y, e);
                         distribute(data, w, h, x+2, y, e);
@@ -439,4 +494,3 @@
     </script>
 </body>
 </html>
-
